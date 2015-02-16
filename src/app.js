@@ -19,13 +19,15 @@ var apiHeaders = {"Authorization": apiKey};
 var locationOptions = { "timeout": 15000, "maximumAge": 1000, "enableHighAccuracy": true };
 
 var fakes = [
-  {lat: 37.794682, lon: -122.402770, addr: 'Montgomery Street', region: 'us-ca'},
+  {lat: 60.1993028, lon: 24.940420, addr: 'HSL', region: 'fi'},
+  // {lat: 32.756324, lon: -117.090995, addr: 'El Cajon Bl & 48th St', region: 'us-ca'},
   {lat: 40.761433, lon: -73.977622, addr: 'MoMA', region: 'us-ny'},
   // {lat: 48.847002, lon: 2.377310, addr: '20, rue Hector Malot', region: 'fr-idf'}
   {lat: 48.873792, lon: 2.295028, addr: 'Arc de Triomphe', region: 'fr-idf'}
 ];
 
 var demoTargets = {
+  'fi': [{title: 'Helsinki Zoo', subtitle: '60.1796087,24.9827908', lat: 60.1796087, lon: 24.98279}],
   'fr-idf': [{title: 'Eiffel Tower', subtitle: '48.85837,2.294481', lat: 48.85837, lon: 2.294481}],
   'us-ca': [{title: 'Golden Gate', subtitle: '37.80826,-122.4752', lat: 37.80826, lon: -122.4752}],
   'us-ny': [{title: 'Empire State Building', subtitle: '40.74844,-73.985664', lat: 40.74844, lon: -73.985664}]
@@ -80,6 +82,9 @@ var menu = new UI.Menu({
 });
 menu.on('select', function(e) {
   console.log('Menu called, section ' + e.sectionIndex + ', item ' + e.itemIndex);
+  if (!e.item) {
+    console.log('Item ' + e.itemIndex + ' not found!');
+  }
   var items = timeTables[e.item.id] || errorItems;
   // menu of stop departures
   var stopMenu = new UI.Menu({
@@ -241,14 +246,7 @@ main.on('select', function(e) {
     // show route
     var from = myLon + ';' + myLat;
     var to = e.item.lon + ';' + e.item.lat;
-    var d = new Date();
-    var dt = d.getFullYear() +
-      ((d.getMonth() < 9) ? '0' + (d.getMonth() + 1) : (d.getMonth() + 1)) +
-      ((d.getDate() < 10) ? '0' + d.getDate() : d.getDate()) +
-      'T' +
-      ((d.getHours() < 10) ? '0' + d.getHours() : d.getHours()) +
-      ((d.getMinutes() < 10) ? '0' + d.getMinutes() : d.getMinutes()) +
-      ((d.getSeconds() < 10) ? '0' + d.getSeconds() : d.getSeconds());      
+    var dt = formatDateTime(new Date());
     var href = apiBase + 'journeys?from=' + from + '&to=' + to + '&datetime=' + dt + '&count=' + MAX_ROUTES;
     console.log("Getting " + href);
     ajax(
@@ -316,13 +314,17 @@ function locationSuccess(position) {
   );
 }
 function initMain(response) {
+  console.log('Init main, got ' + response.regions.length + ' regions');
   region = response.regions[0];
   myAddr = response.address.name;
   getStops('Located');
 }
-function fakeMain() {
+function fakeMain(result) {
+  if (result && result.message) {
+    console.log('Got ' + result.message);
+  }
   var r = Math.floor(Math.random() * fakes.length);
-  console.log('Using fake location ' + r + ' of ' + fakes.length);
+  console.log('Using fake location ' + (r+1) + ' of ' + fakes.length);
   var f = fakes[r];
   myLat = f.lat;
   myLon = f.lon;
@@ -338,7 +340,9 @@ function getStops(title) {
                 lat: myLat, lon: myLon};
   main.section(0, {title: title, items: [myItem]});
   main.item(0, 1, {title: 'Fetching stops...', subtitle: 'Please wait'});
-  var href = apiBase + 'coverage/' + region + '/' + myLon + ';' + myLat + '/departures?count=' + MAX_STOPS;
+  // ridiculous results
+  // var href = apiBase + 'coverage/' + region + '/' + myLon + ';' + myLat + '/departures?count=' + MAX_STOPS;
+  var href = apiBase + 'coverage/' + region + '/coords/' + myLon + ';' + myLat + '/departures?count=' + MAX_STOPS;
   console.log("Getting " + href);
   ajax(
     {url: href, headers: apiHeaders, type: 'json'},
@@ -375,6 +379,13 @@ function buildStopMenu(response) {
     var coords = response.departures[i].stop_point.coord;
     stopLocations[id] = {latitude: coords.lat, longitude: coords.lon};
     var name = response.departures[i].stop_point.name;
+    // PebbleJS has a length bug
+    name = name.replace(/[åäáà]/g, 'a');
+    name = name.replace(/[éè]/g, 'e');
+    name = name.replace(/[ö]/g, 'o');
+    name = name.replace(/[ÅÁÀÄ]/g, 'A');
+    name = name.replace(/[ÉÈ]/g, 'E');
+    name = name.replace(/[Ö]/g, 'O');
     var dist = response.departures[i].stop_point.distance || ''; // not found!
     var addr = getAddress(response.departures[i]);
 /*
@@ -693,6 +704,15 @@ function strToTime(str) {
   var i = str.substr(11,2);
   var s = str.substr(13,2);
   return new Date(y, m, d, h, i, s);
+}
+function formatDateTime(d) {
+  return d.getFullYear() +
+    ((d.getMonth() < 9) ? '0' + (d.getMonth() + 1) : (d.getMonth() + 1)) +
+    ((d.getDate() < 10) ? '0' + d.getDate() : d.getDate()) +
+    'T' +
+    ((d.getHours() < 10) ? '0' + d.getHours() : d.getHours()) +
+    ((d.getMinutes() < 10) ? '0' + d.getMinutes() : d.getMinutes()) +
+    ((d.getSeconds() < 10) ? '0' + d.getSeconds() : d.getSeconds());
 }
 function setAlert(str) {
   if (!str) {
